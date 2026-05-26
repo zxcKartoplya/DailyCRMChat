@@ -58,3 +58,15 @@ export interface LoginResponse {
   token_type: 'bearer'
   user: User
 }
+
+export interface InternalChatMessage {
+  id: number
+  user_id: number
+  message_text: string
+  created_at: string
+  parsed_to_daily_report: boolean
+  daily_report_id: number | null
+  daily_report: DailyReport | null
+  pending?: boolean
+  failed?: boolean
+}

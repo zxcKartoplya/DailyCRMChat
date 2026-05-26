@@ -2,26 +2,89 @@
 import type { DailyReport } from '~/types'
 
 const props = defineProps<{ report: DailyReport | null }>()
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: []; deleted: [id: number]; updated: [report: DailyReport] }>()
+
+const reportsStore = useReportsStore()
+const chatStore = useChatStore()
+
+const isEditing = ref(false)
+const saving = ref(false)
+const deleting = ref(false)
+const confirmDelete = ref(false)
+
+const draft = ref<Partial<DailyReport>>({})
+
+watch(() => props.report, (r) => {
+  isEditing.value = false
+  confirmDelete.value = false
+  draft.value = r ? { ...r } : {}
+}, { immediate: true })
+
+function startEdit() {
+  if (!props.report) return
+  draft.value = { ...props.report }
+  isEditing.value = true
+}
+
+function cancelEdit() {
+  isEditing.value = false
+  draft.value = props.report ? { ...props.report } : {}
+}
+
+async function save() {
+  if (!props.report) return
+  saving.value = true
+  try {
+    const updated = await reportsStore.updateReport(props.report.id, {
+      yesterday_text: draft.value.yesterday_text,
+      today_text: draft.value.today_text,
+      blockers_text: draft.value.blockers_text,
+      mood: draft.value.mood,
+      self_rating: draft.value.self_rating,
+      needs_help: draft.value.needs_help,
+      status: draft.value.status,
+    })
+    isEditing.value = false
+    emit('updated', updated)
+  } finally {
+    saving.value = false
+  }
+}
+
+async function doDelete() {
+  if (!props.report) return
+  deleting.value = true
+  try {
+    const id = props.report.id
+    await reportsStore.deleteReport(id)
+    chatStore.detachReportFromMessages(id)
+    emit('deleted', id)
+    emit('close')
+  } finally {
+    deleting.value = false
+  }
+}
 
 function formatDate(d: string): string {
   return new Date(d + 'T00:00:00').toLocaleDateString('ru-RU', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   })
 }
 
 const moodLabels: Record<string, string> = {
-  great: '😊 Отлично',
-  good: '🙂 Хорошо',
-  neutral: '😐 Нейтрально',
-  bad: '😕 Плохо',
-  terrible: '😞 Ужасно',
+  great: '😊 Отлично', good: '🙂 Хорошо', neutral: '😐 Нейтрально',
+  bad: '😕 Плохо', terrible: '😞 Ужасно',
 }
 
-function ratingColor(r: number | null): string {
+const moods = [
+  { value: 'great', label: '😊 Отлично' },
+  { value: 'good', label: '🙂 Хорошо' },
+  { value: 'neutral', label: '😐 Нейтрально' },
+  { value: 'bad', label: '😕 Плохо' },
+  { value: 'terrible', label: '😞 Ужасно' },
+]
+
+function ratingColor(r: number | null | undefined): string {
   if (!r) return 'text-slate-400'
   if (r <= 4) return 'text-red-400'
   if (r <= 6) return 'text-yellow-400'
@@ -47,7 +110,9 @@ const statusConfig = {
         <!-- Header -->
         <div class="flex items-center justify-between px-5 py-4 border-b border-slate-700">
           <div>
-            <p class="text-xs text-slate-400 uppercase tracking-wider mb-0.5">Дейлик</p>
+            <p class="text-xs text-slate-400 uppercase tracking-wider mb-0.5">
+              {{ isEditing ? 'Редактирование дейлика' : 'Дейлик' }}
+            </p>
             <h2 class="text-base font-semibold text-white">{{ formatDate(report.report_date) }}</h2>
           </div>
           <div class="flex items-center gap-2">
@@ -68,8 +133,8 @@ const statusConfig = {
           </div>
         </div>
 
-        <!-- Body -->
-        <div class="px-5 py-4 space-y-4 max-h-[65vh] overflow-y-auto">
+        <!-- Body: VIEW MODE -->
+        <div v-if="!isEditing" class="px-5 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
           <div v-if="report.yesterday_text" class="space-y-1">
             <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Вчера</p>
             <p class="text-sm text-slate-200 whitespace-pre-wrap">{{ report.yesterday_text }}</p>
@@ -101,6 +166,128 @@ const statusConfig = {
             </div>
           </div>
         </div>
+
+        <!-- Body: EDIT MODE -->
+        <div v-else class="px-5 py-4 space-y-3 max-h-[60vh] overflow-y-auto">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Вчера</label>
+            <textarea
+              v-model="draft.yesterday_text"
+              rows="2"
+              class="w-full bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+            />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Сегодня</label>
+            <textarea
+              v-model="draft.today_text"
+              rows="2"
+              class="w-full bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+            />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Блокеры</label>
+            <textarea
+              v-model="draft.blockers_text"
+              rows="2"
+              class="w-full bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+            />
+          </div>
+          <div class="flex flex-wrap gap-3">
+            <div class="flex-1 min-w-[160px]">
+              <label class="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Настроение</label>
+              <select
+                v-model="draft.mood"
+                class="w-full bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option :value="null">—</option>
+                <option v-for="m in moods" :key="m.value" :value="m.value">{{ m.label }}</option>
+              </select>
+            </div>
+            <div class="w-32">
+              <label class="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Самооценка</label>
+              <input
+                v-model.number="draft.self_rating"
+                type="number"
+                min="1" max="10"
+                class="w-full bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+          <label class="flex items-center gap-2 cursor-pointer text-sm text-slate-200 pt-1">
+            <input v-model="draft.needs_help" type="checkbox" class="rounded" />
+            Нужна помощь
+          </label>
+        </div>
+
+        <!-- Footer -->
+        <div class="px-5 py-3 border-t border-slate-700 flex items-center justify-between gap-2">
+          <!-- View mode actions -->
+          <template v-if="!isEditing && !confirmDelete">
+            <button
+              class="text-sm text-red-400 hover:text-red-300 px-3 py-2 rounded-lg hover:bg-red-900/20 transition-colors"
+              @click="confirmDelete = true"
+            >
+              🗑 Удалить
+            </button>
+            <div class="flex gap-2">
+              <button
+                class="text-sm text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700 transition-colors"
+                @click="emit('close')"
+              >
+                Закрыть
+              </button>
+              <button
+                class="text-sm bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors font-medium"
+                @click="startEdit"
+              >
+                Изменить
+              </button>
+            </div>
+          </template>
+
+          <!-- Delete confirmation -->
+          <template v-else-if="confirmDelete">
+            <p class="text-sm text-slate-300">Удалить дейлик и связанное сообщение?</p>
+            <div class="flex gap-2">
+              <button
+                :disabled="deleting"
+                class="text-sm text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700 transition-colors disabled:opacity-40"
+                @click="confirmDelete = false"
+              >
+                Отмена
+              </button>
+              <button
+                :disabled="deleting"
+                class="text-sm bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg transition-colors font-medium disabled:opacity-40"
+                @click="doDelete"
+              >
+                {{ deleting ? 'Удаление…' : 'Удалить' }}
+              </button>
+            </div>
+          </template>
+
+          <!-- Edit mode actions -->
+          <template v-else>
+            <div />
+            <div class="flex gap-2">
+              <button
+                :disabled="saving"
+                class="text-sm text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700 transition-colors disabled:opacity-40"
+                @click="cancelEdit"
+              >
+                Отмена
+              </button>
+              <button
+                :disabled="saving"
+                class="text-sm bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg transition-colors font-medium disabled:opacity-40"
+                @click="save"
+              >
+                {{ saving ? 'Сохранение…' : 'Сохранить' }}
+              </button>
+            </div>
+          </template>
+        </div>
       </div>
     </div>
   </Transition>
@@ -108,11 +295,7 @@ const statusConfig = {
 
 <style scoped>
 .modal-enter-active,
-.modal-leave-active {
-  transition: opacity 0.2s ease;
-}
+.modal-leave-active { transition: opacity 0.2s ease; }
 .modal-enter-from,
-.modal-leave-to {
-  opacity: 0;
-}
+.modal-leave-to { opacity: 0; }
 </style>
