@@ -11,6 +11,8 @@ pipeline {
         timestamps()
         buildDiscarder(logRotator(numToKeepStr: '10'))
         disableConcurrentBuilds()
+        lock(resource: 'daily-compose-deploy')
+        timeout(time: 30, unit: 'MINUTES')
     }
 
     stages {
@@ -37,15 +39,28 @@ pipeline {
                     docker push ${REGISTRY}/${IMAGE_NAME}:latest
                 """
             }
+            post {
+                failure {
+                    sh """
+                        docker rmi ${REGISTRY}/${IMAGE_NAME}:${BUILD_NUMBER} || true
+                        docker rmi ${REGISTRY}/${IMAGE_NAME}:latest || true
+                    """
+                }
+            }
         }
 
         stage('Deploy') {
             when { branch 'main' }
             steps {
                 sh """
-                    cd ${DEPLOY_DIR} && \
-                    FRONTEND_CHAT_IMAGE=${REGISTRY}/${IMAGE_NAME}:${BUILD_NUMBER} \
+                    cd ${DEPLOY_DIR}
+
+                    sed -i 's|^FRONTEND_CHAT_IMAGE=.*|FRONTEND_CHAT_IMAGE=${REGISTRY}/${IMAGE_NAME}:${BUILD_NUMBER}|' .env
+
                     docker compose up -d --no-deps --force-recreate frontend-chat
+
+
+                    docker compose ps frontend-chat
                 """
             }
         }
@@ -54,6 +69,6 @@ pipeline {
     post {
         success { echo "✅ Frontend Chat #${BUILD_NUMBER} deployed" }
         failure { echo "❌ Build #${BUILD_NUMBER} failed" }
-        always  { sh 'docker image prune -f --filter "until=72h" || true' }
+        always  { sh 'docker image prune -f --filter "until=72h\" || true' }
     }
 }
