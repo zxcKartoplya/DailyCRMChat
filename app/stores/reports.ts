@@ -26,5 +26,20 @@ export const useReportsStore = defineStore('reports', () => {
     return dailyReports.value.find((r) => r.report_date === date)
   }
 
-  return { dailyReports, loading, loadReports, reportForDate }
+  async function updateReport(id: number, payload: Partial<DailyReport>): Promise<DailyReport> {
+    const updated = await apiFetch<DailyReport>(`/employee/daily-reports/${id}`, {
+      method: 'PUT',
+      body: payload,
+    })
+    const idx = dailyReports.value.findIndex(r => r.id === id)
+    if (idx !== -1) dailyReports.value[idx] = updated
+    return updated
+  }
+
+  async function deleteReport(id: number): Promise<void> {
+    await apiFetch(`/employee/daily-reports/${id}`, { method: 'DELETE' })
+    dailyReports.value = dailyReports.value.filter(r => r.id !== id)
+  }
+
+  return { dailyReports, loading, loadReports, reportForDate, updateReport, deleteReport }
 })

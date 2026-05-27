@@ -7,6 +7,21 @@ const authStore = useAuthStore()
 const chatStore = useChatStore()
 const reportsStore = useReportsStore()
 
+function openEdit(report: DailyReport) {
+  selectedReport.value = report
+}
+
+async function quickDelete(report: DailyReport) {
+  if (!confirm(`Удалить дейлик за ${report.report_date} и связанное сообщение?`)) return
+  try {
+    await reportsStore.deleteReport(report.id)
+    chatStore.detachReportFromMessages(report.id)
+    showToast('Дейлик удалён', 'success')
+  } catch (err: unknown) {
+    const e = err as { data?: { detail?: string }; message?: string }
+    showToast(e?.data?.detail ?? e?.message ?? 'Ошибка при удалении')
+  }
+}
 // ── init ────────────────────────────────────────────────────────────────────
 
 onMounted(async () => {
@@ -103,6 +118,8 @@ function onKeydown(e: KeyboardEvent) {
     send()
   }
 }
+
+
 </script>
 
 <template>
@@ -149,6 +166,8 @@ function onKeydown(e: KeyboardEvent) {
               :key="report.id"
               :report="report"
               @click="selectedReport = report"
+              @edit="selectedReport = report"
+              @delete="quickDelete(report)"
             />
           </template>
           <div v-else class="text-center py-8 text-slate-500 text-sm">
@@ -183,6 +202,7 @@ function onKeydown(e: KeyboardEvent) {
             v-for="msg in chatStore.messages"
             :key="msg.id"
             :message="msg"
+            @open-report="(id) => selectedReport = reportsStore.dailyReports.find(r => r.id === id) ?? null"
           />
         </template>
       </div>
