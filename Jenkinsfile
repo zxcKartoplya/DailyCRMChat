@@ -11,7 +11,6 @@ pipeline {
         timestamps()
         buildDiscarder(logRotator(numToKeepStr: '10'))
         disableConcurrentBuilds()
-        lock(resource: 'daily-compose-deploy')
         timeout(time: 30, unit: 'MINUTES')
     }
 
@@ -24,7 +23,7 @@ pipeline {
             steps {
                 sh """
                     docker build \
-                      --build-arg NUXT_PUBLIC_API_BASE=/api \
+                      --build-arg NUXT_PUBLIC_API_BASE=http://45.90.216.186:8000/api \
                       -t ${REGISTRY}/${IMAGE_NAME}:${BUILD_NUMBER} \
                       -t ${REGISTRY}/${IMAGE_NAME}:latest \
                       .
@@ -58,7 +57,6 @@ pipeline {
                     sed -i 's|^FRONTEND_CHAT_IMAGE=.*|FRONTEND_CHAT_IMAGE=${REGISTRY}/${IMAGE_NAME}:${BUILD_NUMBER}|' .env
 
                     docker compose up -d --no-deps --force-recreate frontend-chat
-
 
                     docker compose ps frontend-chat
                 """
