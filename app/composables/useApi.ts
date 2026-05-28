@@ -29,13 +29,22 @@ export function useApi() {
         headers,
       })
     } catch (err: unknown) {
-      const fetchError = err as { status?: number; statusCode?: number }
+      const fetchError = err as { status?: number; statusCode?: number; data?: { detail?: string } }
       const status = fetchError?.status ?? fetchError?.statusCode
       if (status === 401) {
         if (import.meta.client) {
           localStorage.removeItem('auth_token')
         }
         await navigateTo('/login')
+      } else if (status === 422) {
+        const detail = fetchError?.data?.detail
+        throw Object.assign(err as object, {
+          message: typeof detail === 'string' ? detail : 'Неверный формат данных',
+        })
+      } else if (status != null && status >= 500) {
+        throw Object.assign(err as object, {
+          message: 'Ошибка сервера, попробуй ещё раз',
+        })
       }
       throw err
     }
