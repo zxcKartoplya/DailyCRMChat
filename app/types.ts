@@ -11,15 +11,6 @@ export interface User {
   updated_at: string
 }
 
-export interface InternalChatMessage {
-  id: number
-  user_id: number
-  message_text: string
-  created_at: string
-  parsed_to_daily_report: boolean
-  daily_report_id: number | null
-}
-
 export interface InternalChatDailyReportPayload {
   report_date?: string
   yesterday_text?: string

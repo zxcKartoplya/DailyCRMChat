@@ -56,12 +56,12 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
   function detachReportFromMessages(reportId: number): void {
-  messages.value = messages.value.map(m =>
-    m.daily_report_id === reportId
-      ? { ...m, daily_report_id: null, daily_report: null }
-      : m
-  )
-}
+    messages.value = messages.value.map(m =>
+      m.daily_report_id === reportId
+        ? { ...m, daily_report_id: null, daily_report: null }
+        : m,
+    )
+  }
 
-return { messages, loading, sending, loadMessages, sendMessage, detachReportFromMessages }
+  return { messages, loading, sending, loadMessages, sendMessage, detachReportFromMessages }
 })
